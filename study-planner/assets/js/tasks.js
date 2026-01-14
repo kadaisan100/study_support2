@@ -1,232 +1,185 @@
-// ================================
-// タスク管理（tasks.js）
-// ================================
+console.log("tasks.js loaded");
 
-// タスク一覧
-let tasks = [];
+/* ===============================
+   日付表示
+=============================== */
+const todayDateEl = document.getElementById("todayDate");
+if (todayDateEl) {
+    const today = new Date();
+    todayDateEl.textContent =
+        `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+}
 
-// ================================
-// 初期化
-// ================================
-document.addEventListener("DOMContentLoaded", () => {
-  loadTasks();
-  renderTasks();
+/* ===============================
+   タブ切り替え
+=============================== */
+const tabButtons = document.querySelectorAll(".tab-button");
+const tabContents = document.querySelectorAll(".tab-content");
+
+tabButtons.forEach(button => {
+    button.addEventListener("click", () => {
+        const target = button.dataset.tab;
+
+        tabButtons.forEach(b => b.classList.remove("active"));
+        button.classList.add("active");
+
+        tabContents.forEach(content => {
+            content.classList.remove("active");
+            if (content.id === target) {
+                content.classList.add("active");
+            }
+        });
+    });
 });
 
-// ================================
-// タスク構造
-// ================================
-/*
-task = {
-  id: string,
-  title: string,
-  subjectColor: string,
-  isDaily: boolean,
-  deadline: string | null,   // YYYY-MM-DD
-  totalPages: number,        // 必要ページ数
-  donePages: number,         // 完了ページ数
-  estimatedMinutes: number,  // 想定総時間（分）
-  doneMinutes: number,       // 実績時間（分）
-  remainingMinutes: number   // 残り時間（分）
-}
-*/
+/* ===============================
+   データ
+=============================== */
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+let currentTaskId = null;
 
-// ================================
-// 保存・読込
-// ================================
-function saveTasks() {
-  localStorage.setItem("studyPlannerTasks", JSON.stringify(tasks));
-}
+/* ===============================
+   DOM取得
+=============================== */
+const taskForm = document.getElementById("taskForm");
+const taskTitle = document.getElementById("taskTitle");
+const taskDeadline = document.getElementById("taskDeadline");
+const taskPages = document.getElementById("taskPages");
+const taskDaily = document.getElementById("taskDaily");
+const taskColor = document.getElementById("taskColor");
 
-function loadTasks() {
-  const data = localStorage.getItem("studyPlannerTasks");
-  if (data) {
-    tasks = JSON.parse(data);
-  }
-}
+const dailyTaskList = document.getElementById("dailyTaskList");
+const taskList = document.getElementById("taskList");
+const completedTaskList = document.getElementById("completedTaskList");
 
-// ================================
-// 完了判定
-// ================================
-function isTaskCompleted(task) {
-  return task.donePages >= task.totalPages;
-}
+/* ===============================
+   モーダル
+=============================== */
+const taskModal = document.getElementById("taskModal");
+const modalTitle = document.getElementById("modalTitle");
+const modalPagesRequired = document.getElementById("modalPagesRequired");
+const modalPagesAdd = document.getElementById("modalPagesAdd");
+const saveModalBtn = document.getElementById("saveModalBtn");
+const closeModalBtn = document.getElementById("closeModalBtn");
 
-// ================================
-// タスク追加
-// ================================
-function addTask({
-  title,
-  subjectColor,
-  isDaily = false,
-  deadline = null,
-  totalPages = 0,
-  estimatedMinutes = 0
-}) {
-  const task = {
-    id: crypto.randomUUID(),
-    title,
-    subjectColor,
-    isDaily,
-    deadline,
-    totalPages,
-    donePages: 0,
-    estimatedMinutes,
-    doneMinutes: 0,
-    remainingMinutes: estimatedMinutes
-  };
+/* ===============================
+   初期描画
+=============================== */
+renderTasks();
 
-  tasks.push(task);
-  saveTasks();
-  renderTasks();
+/* ===============================
+   タスク追加
+=============================== */
+taskForm.addEventListener("submit", e => {
+    e.preventDefault();
 
-  if (typeof rescheduleStudyPlans === "function") {
-    rescheduleStudyPlans();
-  }
-}
+    const newTask = {
+        id: Date.now(),
+        title: taskTitle.value,
+        deadline: taskDaily.checked ? null : taskDeadline.value,
+        pagesRequired: Number(taskPages.value),
+        pagesDone: 0,
+        daily: taskDaily.checked,
+        color: taskColor.value,
+        completed: false
+    };
 
-// ================================
-// タスク更新（詳細画面）
-// ================================
-function updateTask(taskId, updates) {
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) return;
+    tasks.push(newTask);
+    saveTasks();
+    renderTasks();
+    taskForm.reset();
+});
 
-  Object.assign(task, updates);
+/* ===============================
+   描画
+=============================== */
+function renderTasks() {
+    dailyTaskList.innerHTML = "";
+    taskList.innerHTML = "";
+    completedTaskList.innerHTML = "";
 
-  // 完了ページ数が増えた場合の補正
-  if (task.donePages > task.totalPages) {
-    task.totalPages = task.donePages;
-  }
-
-  recalcRemainingTime(task);
-  saveTasks();
-  renderTasks();
-
-  if (typeof rescheduleStudyPlans === "function") {
-    rescheduleStudyPlans();
-  }
+    tasks.forEach(task => {
+        if (task.completed) {
+            completedTaskList.appendChild(createTaskElement(task));
+        } else if (task.daily) {
+            dailyTaskList.appendChild(createTaskElement(task));
+        } else {
+            taskList.appendChild(createTaskElement(task));
+        }
+    });
 }
 
-// ================================
-// 進捗入力
-// ================================
-function addProgress(taskId, pages, minutes) {
-  const task = tasks.find(t => t.id === taskId);
-  if (!task) return;
+function createTaskElement(task) {
+    const item = document.createElement("div");
+    item.className = "task-item";
 
-  task.donePages += pages;
-  task.doneMinutes += minutes;
+    item.innerHTML = `
+        <div class="task-color" style="background:${task.color}"></div>
+        <div class="task-main">
+            <div class="task-title">
+                ${task.title}
+                ${task.daily ? `<span class="daily-label">毎日</span>` : ""}
+            </div>
+            <div class="task-info">
+                <span>${task.pagesDone} / ${task.pagesRequired} ページ</span>
+                ${task.deadline ? `<span>締切: ${task.deadline}</span>` : ""}
+            </div>
+        </div>
+        <button class="task-open-btn">詳細</button>
+    `;
 
-  recalcRemainingTime(task);
-  saveTasks();
-  renderTasks();
+    item.querySelector(".task-open-btn").onclick = () => {
+        openTaskModal(task.id);
+    };
 
-  if (typeof rescheduleStudyPlans === "function") {
-    rescheduleStudyPlans();
-  }
+    return item;
 }
 
-// ================================
-// 残り時間再計算
-// ================================
-function recalcRemainingTime(task) {
-  task.remainingMinutes = Math.max(
-    0,
-    task.estimatedMinutes - task.doneMinutes
-  );
+/* ===============================
+   モーダル
+=============================== */
+function openTaskModal(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    currentTaskId = taskId;
+    modalTitle.textContent = task.title;
+    modalPagesRequired.value = task.pagesRequired;
+    modalPagesAdd.value = "";
+
+    taskModal.classList.remove("hidden");
 }
 
-// ================================
-// 並び順制御
-// ================================
-function getSortedTasks() {
-  const active = tasks.filter(t => !isTaskCompleted(t));
-  const completed = tasks.filter(t => isTaskCompleted(t));
+saveModalBtn.onclick = () => {
+    const task = tasks.find(t => t.id === currentTaskId);
+    if (!task) return;
 
-  active.sort((a, b) => {
-    // 毎日課題優先
-    if (a.isDaily && !b.isDaily) return -1;
-    if (!a.isDaily && b.isDaily) return 1;
+    const add = Number(modalPagesAdd.value);
+    const required = Number(modalPagesRequired.value);
 
-    // 締切が近い順
-    if (a.deadline && b.deadline) {
-      const diff = new Date(a.deadline) - new Date(b.deadline);
-      if (diff !== 0) return diff;
+    task.pagesDone = Number(task.pagesDone) || 0;
+    task.pagesRequired = required;
+
+    if (!isNaN(add)) {
+        task.pagesDone += add;
     }
 
-    // 次回取り組み時間（残り時間が少ない方を優先）
-    return a.remainingMinutes - b.remainingMinutes;
-  });
+    if (task.pagesDone >= task.pagesRequired) {
+        task.completed = true;
+    }
 
-  return { active, completed };
-}
+    saveTasks();
+    renderTasks();
+    taskModal.classList.add("hidden");
+};
 
-// ================================
-// 表示
-// ================================
-function renderTasks() {
-  const activeList = document.getElementById("task-list");
-  const completedList = document.getElementById("completed-task-list");
+closeModalBtn.onclick = () => {
+    taskModal.classList.add("hidden");
+};
 
-  if (!activeList || !completedList) return;
-
-  activeList.innerHTML = "";
-  completedList.innerHTML = "";
-
-  const { active, completed } = getSortedTasks();
-
-  active.forEach(task => {
-    activeList.appendChild(createTaskElement(task));
-  });
-
-  completed.forEach(task => {
-    completedList.appendChild(createTaskElement(task, true));
-  });
-}
-
-// ================================
-// タスクDOM生成
-// ================================
-function createTaskElement(task, completed = false) {
-  const div = document.createElement("div");
-  div.className = "task-item";
-  if (completed) div.classList.add("completed");
-
-  const progressPercent =
-    task.totalPages > 0
-      ? Math.min(100, Math.round((task.donePages / task.totalPages) * 100))
-      : 0;
-
-  div.innerHTML = `
-    <div class="task-header">
-      <span class="task-color" style="background:${task.subjectColor}"></span>
-      <span class="task-title">${task.title}</span>
-    </div>
-
-    <div class="task-info">
-      <span>
-        ${task.doneMinutes}分 /
-        ${task.estimatedMinutes}分
-      </span>
-      <span>
-        ${task.donePages} / ${task.totalPages} ページ
-      </span>
-    </div>
-
-    <div class="task-progress">
-      <div class="task-progress-bar" style="width:${progressPercent}%"></div>
-    </div>
-  `;
-
-  div.onclick = () => openTaskDetail(task.id);
-  return div;
-}
-
-// ================================
-// 詳細画面（ダミー）
-// ================================
-function openTaskDetail(taskId) {
-  // 詳細モーダル等はここから実装
-  console.log("open task detail:", taskId);
+/* ===============================
+   保存
+=============================== */
+function saveTasks() {
+    localStorage.setItem("tasks", JSON.stringify(tasks));
 }
