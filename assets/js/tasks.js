@@ -1,148 +1,185 @@
 console.log("tasks.js loaded");
 
 /* ===============================
-   グローバル
+   日付表示
 =============================== */
-let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+const todayDateEl = document.getElementById("todayDate");
+if (todayDateEl) {
+    const today = new Date();
+    todayDateEl.textContent =
+        `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+}
 
 /* ===============================
-   初期化
+   タブ切り替え
 =============================== */
-document.addEventListener("DOMContentLoaded", () => {
-    renderTaskList();
+const tabButtons = document.querySelectorAll(".tab-button");
+const tabContents = document.querySelectorAll(".tab-content");
+
+tabButtons.forEach(button => {
+    button.addEventListener("click", () => {
+        const target = button.dataset.tab;
+
+        tabButtons.forEach(b => b.classList.remove("active"));
+        button.classList.add("active");
+
+        tabContents.forEach(content => {
+            content.classList.remove("active");
+            if (content.id === target) {
+                content.classList.add("active");
+            }
+        });
+    });
 });
+
+/* ===============================
+   データ
+=============================== */
+let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+let currentTaskId = null;
+
+/* ===============================
+   DOM取得
+=============================== */
+const taskForm = document.getElementById("taskForm");
+const taskTitle = document.getElementById("taskTitle");
+const taskDeadline = document.getElementById("taskDeadline");
+const taskPages = document.getElementById("taskPages");
+const taskDaily = document.getElementById("taskDaily");
+const taskColor = document.getElementById("taskColor");
+
+const dailyTaskList = document.getElementById("dailyTaskList");
+const taskList = document.getElementById("taskList");
+const completedTaskList = document.getElementById("completedTaskList");
+
+/* ===============================
+   モーダル
+=============================== */
+const taskModal = document.getElementById("taskModal");
+const modalTitle = document.getElementById("modalTitle");
+const modalPagesRequired = document.getElementById("modalPagesRequired");
+const modalPagesAdd = document.getElementById("modalPagesAdd");
+const saveModalBtn = document.getElementById("saveModalBtn");
+const closeModalBtn = document.getElementById("closeModalBtn");
+
+/* ===============================
+   初期描画
+=============================== */
+renderTasks();
 
 /* ===============================
    タスク追加
 =============================== */
-const taskForm = document.getElementById("taskForm");
-if (taskForm) {
-    taskForm.addEventListener("submit", e => {
-        e.preventDefault();
+taskForm.addEventListener("submit", e => {
+    e.preventDefault();
 
-        const title = document.getElementById("taskTitle").value.trim();
-        const deadline = document.getElementById("taskDeadline").value;
-        const pages = Number(document.getElementById("taskPages").value) || 0;
-        const color = document.getElementById("taskColor").value || "#4e7cff";
+    const newTask = {
+        id: Date.now(),
+        title: taskTitle.value,
+        deadline: taskDaily.checked ? null : taskDeadline.value,
+        pagesRequired: Number(taskPages.value),
+        pagesDone: 0,
+        daily: taskDaily.checked,
+        color: taskColor.value,
+        completed: false
+    };
 
-        if (!title || !deadline || pages <= 0) {
-            alert("正しく入力してください");
-            return;
-        }
-
-        tasks.push({
-            id: Date.now(),
-            title,
-            deadline,
-            totalPages: pages,
-            donePages: 0,
-            color,
-            completed: false,
-            history: []
-        });
-
-        saveTasks();
-        taskForm.reset();
-        renderTaskList();
-    });
-}
+    tasks.push(newTask);
+    saveTasks();
+    renderTasks();
+    taskForm.reset();
+});
 
 /* ===============================
-   タスク一覧
+   描画
 =============================== */
-function renderTaskList() {
-    const list = document.getElementById("taskList");
-    if (!list) return;
-
-    list.innerHTML = "";
-
-    if (tasks.length === 0) {
-        list.innerHTML = "<p>課題はありません</p>";
-        return;
-    }
+function renderTasks() {
+    dailyTaskList.innerHTML = "";
+    taskList.innerHTML = "";
+    completedTaskList.innerHTML = "";
 
     tasks.forEach(task => {
-        const div = document.createElement("div");
-        div.className = "task-item";
+        if (task.completed) {
+            completedTaskList.appendChild(createTaskElement(task));
+        } else if (task.daily) {
+            dailyTaskList.appendChild(createTaskElement(task));
+        } else {
+            taskList.appendChild(createTaskElement(task));
+        }
+    });
+}
 
-        div.innerHTML = `
-            <div class="task-color" style="background:${task.color}"></div>
-            <div class="task-main">
-                <div class="task-title">${task.title}</div>
-                <div class="task-info">
-                    <span>締切: ${task.deadline}</span>
-                    <span>${task.donePages}/${task.totalPages} ページ</span>
-                </div>
+function createTaskElement(task) {
+    const item = document.createElement("div");
+    item.className = "task-item";
+
+    item.innerHTML = `
+        <div class="task-color" style="background:${task.color}"></div>
+        <div class="task-main">
+            <div class="task-title">
+                ${task.title}
+                ${task.daily ? `<span class="daily-label">毎日</span>` : ""}
             </div>
-        `;
+            <div class="task-info">
+                <span>${task.pagesDone} / ${task.pagesRequired} ページ</span>
+                ${task.deadline ? `<span>締切: ${task.deadline}</span>` : ""}
+            </div>
+        </div>
+        <button class="task-open-btn">詳細</button>
+    `;
 
-        list.appendChild(div);
-    });
+    item.querySelector(".task-open-btn").onclick = () => {
+        openTaskModal(task.id);
+    };
+
+    return item;
 }
 
 /* ===============================
-   学習速度推定（B-2）
+   モーダル
 =============================== */
-function estimateSpeed(task) {
-    if (!task.history || task.history.length === 0) return 1;
+function openTaskModal(taskId) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
 
-    let totalPages = 0;
-    let totalMinutes = 0;
+    currentTaskId = taskId;
+    modalTitle.textContent = task.title;
+    modalPagesRequired.value = task.pagesRequired;
+    modalPagesAdd.value = "";
 
-    task.history.forEach(h => {
-        totalPages += h.pages || 0;
-        totalMinutes += h.minutes || 0;
-    });
-
-    if (totalMinutes <= 0) return 1;
-    return totalPages / totalMinutes;
+    taskModal.classList.remove("hidden");
 }
 
-function estimateRemainingMinutes(task) {
-    const speed = estimateSpeed(task);
-    const remainingPages = Math.max(
-        task.totalPages - task.donePages,
-        0
-    );
-    return Math.ceil(remainingPages / speed);
-}
+saveModalBtn.onclick = () => {
+    const task = tasks.find(t => t.id === currentTaskId);
+    if (!task) return;
 
-/* ===============================
-   今日の学習予定生成
-=============================== */
-function generateTodayStudyPlans(dateStr) {
-    if (!dateStr) return [];
+    const add = Number(modalPagesAdd.value);
+    const required = Number(modalPagesRequired.value);
 
-    return tasks
-        .filter(t => !t.completed && t.deadline >= dateStr)
-        .map(task => ({
-            taskId: task.id,
-            title: task.title,
-            minutes: estimateRemainingMinutes(task),
-            color: task.color
-        }));
-}
+    task.pagesDone = Number(task.pagesDone) || 0;
+    task.pagesRequired = required;
+
+    if (!isNaN(add)) {
+        task.pagesDone += add;
+    }
+
+    if (task.pagesDone >= task.pagesRequired) {
+        task.completed = true;
+    }
+
+    saveTasks();
+    renderTasks();
+    taskModal.classList.add("hidden");
+};
+
+closeModalBtn.onclick = () => {
+    taskModal.classList.add("hidden");
+};
 
 /* ===============================
    保存
 =============================== */
 function saveTasks() {
     localStorage.setItem("tasks", JSON.stringify(tasks));
-}
-
-/* ===============================
-   学習履歴追加
-=============================== */
-function addStudyHistory(taskId, date, pages, minutes) {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    task.history.push({ date, pages, minutes });
-    task.donePages += pages;
-
-    if (task.donePages >= task.totalPages) {
-        task.completed = true;
-    }
-
-    saveTasks();
 }
