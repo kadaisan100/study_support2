@@ -178,7 +178,7 @@ body {
 }
 
 /* ===============================
-   モーダル（詳細画面）
+   モーダル
 =============================== */
 .modal {
     position: fixed;
@@ -203,47 +203,6 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
-}
-
-.modal-content h3 {
-    font-size: 18px;
-    margin-bottom: 8px;
-}
-
-.modal-content label {
-    font-size: 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.modal-content input {
-    padding: 8px;
-    border-radius: 6px;
-    border: 1px solid #ccc;
-}
-
-.modal-buttons {
-    display: flex;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.modal-buttons button {
-    flex: 1;
-    padding: 10px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
-#saveModalBtn {
-    background: #4e7cff;
-    color: white;
-}
-
-#closeModalBtn {
-    background: #ddd;
 }
 
 /* ===============================
@@ -283,12 +242,10 @@ body {
     background: white;
     border-radius: 8px;
     height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     position: relative;
     cursor: pointer;
     box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    padding: 4px;
 }
 
 .calendar-cell.blank {
@@ -305,16 +262,26 @@ body {
     font-size: 14px;
 }
 
+/* ====== ドット（課題・私用予定） ====== */
 .calendar-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #ff4757;
     position: absolute;
     bottom: 6px;
 }
 
-.calendar-cell.has-task-completed .calendar-dot {
+.task-dot {
+    left: 6px;
+    background: #4e7cff;
+}
+
+.private-dot {
+    right: 6px;
+    background: #ff6b6b;
+}
+
+.calendar-cell.has-task-completed .task-dot {
     background: #aaa;
 }
 
@@ -338,14 +305,50 @@ body {
     margin-bottom: 8px;
 }
 
+.calendar-day-detail h4 {
+    font-size: 14px;
+    margin-top: 10px;
+}
+
 .calendar-day-detail ul {
     list-style: none;
-    padding-left: 0;
 }
 
 .calendar-day-detail li {
     font-size: 14px;
     margin-bottom: 4px;
+}
+
+/* ===============================
+   私用予定入力フォーム
+=============================== */
+.private-form {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.private-form input,
+.private-form select {
+    padding: 6px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+.time-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.private-form button {
+    padding: 8px;
+    background: #ff6b6b;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
 }
 
 /* ===============================
