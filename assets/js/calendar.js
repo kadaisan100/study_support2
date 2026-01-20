@@ -4,39 +4,7 @@ const calendarContainer = document.getElementById("calendar");
 
 let currentDate = new Date();
 let selectedDate = null;
-
-/* ===============================
-   私用予定（学習不可時間）
-=============================== */
-
-function loadPrivateEvents() {
-    return JSON.parse(localStorage.getItem("privateEvents")) || [];
-}
-
-function savePrivateEvents(events) {
-    localStorage.setItem("privateEvents", JSON.stringify(events));
-}
-
-function getPrivateEventsForDate(targetDate) {
-    const events = loadPrivateEvents();
-    const target = new Date(targetDate);
-
-    return events.filter(event => {
-        const baseDate = new Date(event.date);
-
-        if (event.repeat === "none") {
-            return event.date === targetDate;
-        }
-        if (event.repeat === "daily") {
-            return target >= baseDate;
-        }
-        if (event.repeat === "weekly") {
-            return target >= baseDate &&
-                   target.getDay() === baseDate.getDay();
-        }
-        return false;
-    });
-}
+let editingPrivateIndex = null;
 
 /* ===============================
    初期化
@@ -109,137 +77,152 @@ function updateCalendar() {
     }
 
     const tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+    const privates = JSON.parse(localStorage.getItem("privateEvents")) || [];
 
     for (let day = 1; day <= lastDate; day++) {
         const cell = document.createElement("div");
         cell.className = "calendar-cell";
 
-        const dateStr =
-            `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
         const dayTasks = tasks.filter(t => t.deadline === dateStr);
-        const privateEvents = getPrivateEventsForDate(dateStr);
+        const dayPrivates = privates.filter(p => p.date === dateStr);
 
         cell.innerHTML = `
             <div class="calendar-day-number">${day}</div>
             ${dayTasks.length ? `<div class="calendar-dot task-dot"></div>` : ""}
-            ${privateEvents.length ? `<div class="calendar-dot private-dot"></div>` : ""}
+            ${dayPrivates.length ? `<div class="calendar-dot private-dot"></div>` : ""}
         `;
 
-        if (dayTasks.some(t => !t.completed)) {
-            cell.classList.add("has-task");
-        } else if (dayTasks.length) {
-            cell.classList.add("has-task-completed");
-        }
-
-        if (privateEvents.length) {
-            cell.classList.add("has-private");
-        }
-
-        cell.onclick = () =>
-            selectDate(dateStr, dayTasks, privateEvents, cell);
-
+        cell.onclick = () => selectDate(dateStr, dayTasks, dayPrivates, cell);
         grid.appendChild(cell);
     }
 }
 
 /* ===============================
-   私用予定フォーム
+   日付選択
 =============================== */
+function selectDate(dateStr, tasks, privates, cell) {
+    selectedDate = dateStr;
+    editingPrivateIndex = null;
 
-function renderPrivateEventForm(dateStr) {
-    return `
-        <h4>私用予定を追加</h4>
+    document.querySelectorAll(".calendar-cell")
+        .forEach(c => c.classList.remove("selected"));
+    cell.classList.add("selected");
+
+    renderDayDetail(tasks, privates);
+}
+
+/* ===============================
+   日別詳細描画
+=============================== */
+function renderDayDetail(tasks, privates) {
+    const detail = document.getElementById("calendarDayDetail");
+
+    detail.innerHTML = `
+        <h3>${selectedDate}</h3>
+
+        <h4>締切課題</h4>
+        ${tasks.length ? `
+            <ul>
+                ${tasks.map(t => `
+                    <li>${t.title} ${t.completed ? "（完了）" : "（未完了）"}</li>
+                `).join("")}
+            </ul>
+        ` : "<p>なし</p>"}
+
+        <h4>私用予定（学習不可）</h4>
+        ${privates.length ? `
+            <ul>
+                ${privates.map((p, i) => `
+                    <li>
+                        ${p.start}〜${p.end}：${p.title}
+                        <button onclick="editPrivate(${i})">編集</button>
+                        <button onclick="deletePrivate(${i})">削除</button>
+                    </li>
+                `).join("")}
+            </ul>
+        ` : "<p>なし</p>"}
+
+        <h4>${editingPrivateIndex === null ? "追加" : "編集"}する</h4>
         <div class="private-form">
-            <input type="text" id="privateTitle" placeholder="予定名">
-
+            <input type="text" id="privateTitle" placeholder="内容">
             <div class="time-row">
                 <input type="time" id="privateStart">
                 <span>〜</span>
                 <input type="time" id="privateEnd">
             </div>
-
-            <select id="privateRepeat">
-                <option value="none">繰り返しなし</option>
-                <option value="daily">毎日</option>
-                <option value="weekly">毎週</option>
-            </select>
-
-            <button id="addPrivateBtn">追加</button>
+            <button id="savePrivateBtn">保存</button>
         </div>
     `;
-}
 
-function setupPrivateEventForm(dateStr) {
-    const btn = document.getElementById("addPrivateBtn");
-    if (!btn) return;
-
-    btn.onclick = () => {
-        const title = document.getElementById("privateTitle").value.trim();
-        const startTime = document.getElementById("privateStart").value;
-        const endTime = document.getElementById("privateEnd").value;
-        const repeat = document.getElementById("privateRepeat").value;
-
-        if (!title || !startTime || !endTime) {
-            alert("すべて入力してください");
-            return;
-        }
-
-        const events = loadPrivateEvents();
-        events.push({
-            id: "evt-" + Date.now(),
-            title,
-            date: dateStr,
-            startTime,
-            endTime,
-            repeat
-        });
-
-        savePrivateEvents(events);
-
-        updateCalendar();
-        selectDate(
-            dateStr,
-            JSON.parse(localStorage.getItem("tasks")) || [],
-            getPrivateEventsForDate(dateStr),
-            document.querySelector(".calendar-cell.selected")
-        );
-    };
+    document.getElementById("savePrivateBtn").onclick = savePrivate;
 }
 
 /* ===============================
-   日付選択
+   私用予定 保存 / 更新
 =============================== */
-function selectDate(dateStr, tasks, privateEvents, cell) {
-    document.querySelectorAll(".calendar-cell")
-        .forEach(c => c.classList.remove("selected"));
+function savePrivate() {
+    const title = document.getElementById("privateTitle").value.trim();
+    const start = document.getElementById("privateStart").value;
+    const end = document.getElementById("privateEnd").value;
 
-    cell.classList.add("selected");
-
-    const detail = document.getElementById("calendarDayDetail");
-
-    let html = `<h3>${dateStr} の予定</h3>`;
-
-    html += `<h4>締切課題</h4>`;
-    if (!tasks.length) {
-        html += `<p>なし</p>`;
-    } else {
-        html += `<ul>${tasks.map(t =>
-            `<li>${t.title} ${t.completed ? "（完了）" : "（未完了）"}</li>`
-        ).join("")}</ul>`;
+    if (!title || !start || !end) {
+        alert("すべて入力してください");
+        return;
     }
 
-    html += `<h4>私用予定（学習不可）</h4>`;
-    if (!privateEvents.length) {
-        html += `<p>なし</p>`;
+    const privates = JSON.parse(localStorage.getItem("privateEvents")) || [];
+
+    if (editingPrivateIndex === null) {
+        privates.push({ date: selectedDate, title, start, end });
     } else {
-        html += `<ul>${privateEvents.map(e =>
-            `<li>${e.startTime}〜${e.endTime} ${e.title}</li>`
-        ).join("")}</ul>`;
+        privates[editingPrivateIndex] = { date: selectedDate, title, start, end };
+        editingPrivateIndex = null;
     }
 
-    html += renderPrivateEventForm(dateStr);
-    detail.innerHTML = html;
+    localStorage.setItem("privateEvents", JSON.stringify(privates));
+    updateCalendar();
 
-    setupPrivateEventForm(dateStr);
+    const dayTasks = JSON.parse(localStorage.getItem("tasks")) || [];
+    renderDayDetail(
+        dayTasks.filter(t => t.deadline === selectedDate),
+        privates.filter(p => p.date === selectedDate)
+    );
+}
+
+/* ===============================
+   編集
+=============================== */
+function editPrivate(index) {
+    const privates = JSON.parse(localStorage.getItem("privateEvents")) || [];
+    const p = privates.filter(p => p.date === selectedDate)[index];
+
+    editingPrivateIndex = privates.indexOf(p);
+
+    document.getElementById("privateTitle").value = p.title;
+    document.getElementById("privateStart").value = p.start;
+    document.getElementById("privateEnd").value = p.end;
+}
+
+/* ===============================
+   削除
+=============================== */
+function deletePrivate(index) {
+    if (!confirm("削除しますか？")) return;
+
+    let privates = JSON.parse(localStorage.getItem("privateEvents")) || [];
+    const dayList = privates.filter(p => p.date === selectedDate);
+    const target = dayList[index];
+
+    privates = privates.filter(p => p !== target);
+    localStorage.setItem("privateEvents", JSON.stringify(privates));
+
+    updateCalendar();
+
+    const tasks = JSON.parse(localStorage.getItem("tasks")) || [];
+    renderDayDetail(
+        tasks.filter(t => t.deadline === selectedDate),
+        privates.filter(p => p.date === selectedDate)
+    );
 }
