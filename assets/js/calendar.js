@@ -31,10 +31,8 @@ function getPrivateEventsForDate(targetDate) {
             return target >= baseDate;
         }
         if (event.repeat === "weekly") {
-            return (
-                target >= baseDate &&
-                target.getDay() === baseDate.getDay()
-            );
+            return target >= baseDate &&
+                   target.getDay() === baseDate.getDay();
         }
         return false;
     });
@@ -116,7 +114,8 @@ function updateCalendar() {
         const cell = document.createElement("div");
         cell.className = "calendar-cell";
 
-        const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        const dateStr =
+            `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
         const dayTasks = tasks.filter(t => t.deadline === dateStr);
         const privateEvents = getPrivateEventsForDate(dateStr);
@@ -145,11 +144,73 @@ function updateCalendar() {
 }
 
 /* ===============================
+   私用予定フォーム
+=============================== */
+
+function renderPrivateEventForm(dateStr) {
+    return `
+        <h4>私用予定を追加</h4>
+        <div class="private-form">
+            <input type="text" id="privateTitle" placeholder="予定名">
+
+            <div class="time-row">
+                <input type="time" id="privateStart">
+                <span>〜</span>
+                <input type="time" id="privateEnd">
+            </div>
+
+            <select id="privateRepeat">
+                <option value="none">繰り返しなし</option>
+                <option value="daily">毎日</option>
+                <option value="weekly">毎週</option>
+            </select>
+
+            <button id="addPrivateBtn">追加</button>
+        </div>
+    `;
+}
+
+function setupPrivateEventForm(dateStr) {
+    const btn = document.getElementById("addPrivateBtn");
+    if (!btn) return;
+
+    btn.onclick = () => {
+        const title = document.getElementById("privateTitle").value.trim();
+        const startTime = document.getElementById("privateStart").value;
+        const endTime = document.getElementById("privateEnd").value;
+        const repeat = document.getElementById("privateRepeat").value;
+
+        if (!title || !startTime || !endTime) {
+            alert("すべて入力してください");
+            return;
+        }
+
+        const events = loadPrivateEvents();
+        events.push({
+            id: "evt-" + Date.now(),
+            title,
+            date: dateStr,
+            startTime,
+            endTime,
+            repeat
+        });
+
+        savePrivateEvents(events);
+
+        updateCalendar();
+        selectDate(
+            dateStr,
+            JSON.parse(localStorage.getItem("tasks")) || [],
+            getPrivateEventsForDate(dateStr),
+            document.querySelector(".calendar-cell.selected")
+        );
+    };
+}
+
+/* ===============================
    日付選択
 =============================== */
 function selectDate(dateStr, tasks, privateEvents, cell) {
-    selectedDate = dateStr;
-
     document.querySelectorAll(".calendar-cell")
         .forEach(c => c.classList.remove("selected"));
 
@@ -159,38 +220,26 @@ function selectDate(dateStr, tasks, privateEvents, cell) {
 
     let html = `<h3>${dateStr} の予定</h3>`;
 
-    /* 締切課題 */
     html += `<h4>締切課題</h4>`;
     if (!tasks.length) {
         html += `<p>なし</p>`;
     } else {
-        html += `
-            <ul>
-                ${tasks.map(t => `
-                    <li>
-                        ${t.title}
-                        ${t.completed ? "（完了）" : "（未完了）"}
-                    </li>
-                `).join("")}
-            </ul>
-        `;
+        html += `<ul>${tasks.map(t =>
+            `<li>${t.title} ${t.completed ? "（完了）" : "（未完了）"}</li>`
+        ).join("")}</ul>`;
     }
 
-    /* 私用予定 */
     html += `<h4>私用予定（学習不可）</h4>`;
     if (!privateEvents.length) {
         html += `<p>なし</p>`;
     } else {
-        html += `
-            <ul>
-                ${privateEvents.map(e => `
-                    <li>
-                        ${e.startTime}〜${e.endTime} ${e.title}
-                    </li>
-                `).join("")}
-            </ul>
-        `;
+        html += `<ul>${privateEvents.map(e =>
+            `<li>${e.startTime}〜${e.endTime} ${e.title}</li>`
+        ).join("")}</ul>`;
     }
 
+    html += renderPrivateEventForm(dateStr);
     detail.innerHTML = html;
+
+    setupPrivateEventForm(dateStr);
 }
